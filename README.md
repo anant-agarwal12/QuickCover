@@ -45,9 +45,9 @@ GigShield exists to close this gap with a zero-friction, AI-automated parametric
 
 GigShield is an **Android-first, AI-native parametric income insurance platform** that:
 
-- Enrolls a delivery partner in under **3 minutes** using their platform ID (Zomato/Swiggy worker ID)
-- Issues a **weekly policy** priced dynamically based on real-time local risk
-- **Automatically detects** qualifying disruptions via weather, AQI, traffic, and platform signals
+- Enrolls a delivery partner in under **3 minutes** using their platform ID (Zomato/Swiggy worker ID) — via the Android app **or** a WhatsApp bot for workers who prefer chat-first interactions
+- Issues a **weekly policy** priced dynamically based on real-time hyper-local risk (zone-level, not city-level)
+- **Automatically detects** qualifying disruptions via weather, AQI, traffic, platform signals, and crowdsourced rider reports
 - **Triggers and processes claims without the worker filing anything** — zero-touch payout
 - Pays directly to the worker's **UPI/bank account within 2 hours** of a disruption event closing
 - Employs a **multi-layer AI fraud detection engine** to ensure platform integrity
@@ -100,6 +100,21 @@ He never opened the app once.
 
 ---
 
+**Scenario D — Crowdsourced Flash Disruption**
+
+> A sudden transformer failure blacks out a market area. No official advisory. No weather event. But 60 delivery workers in a 2km radius all hit "Report Disruption" in the app within 12 minutes.
+
+1. GigShield's crowdsourced trigger engine receives 60+ reports from the same zone polygon within 15 minutes — quorum threshold met.
+2. Traffic API corroborates: road velocity in the zone has dropped to near zero.
+3. A **Flash Review** is initiated — the system queues the event for rapid human confirmation (target: 20 minutes).
+4. Human adjudicator confirms the disruption is legitimate. Trigger is approved.
+5. Payout window opens retroactively from the first report timestamp.
+6. Workers who reported the disruption receive a small **Reporting Karma** credit — a ₹5 premium discount on their next week's policy.
+
+This is our Waze moment: riders as real-time sensors for events no API can detect.
+
+---
+
 ## Weekly Premium Model
 
 We intentionally designed the financial model around the delivery worker's **weekly payout cycle**, not monthly.
@@ -139,23 +154,43 @@ Payout = (Worker Avg Hourly Earnings) × (Confirmed Disruption Hours) × Coverag
 
 Capped at the tier's weekly payout limit. Pro-rated daily across a multi-day event.
 
+### Sachet Mode — Per-Delivery Premium Collection
+
+For workers who find even a ₹29 upfront weekly payment psychologically difficult, we offer **Sachet Mode**: instead of a single weekly deduction, the premium is collected as a tiny per-delivery micro-charge — ₹1.50–₹2.50 per completed delivery, up to a cap of 25 deliveries per week.
+
+This matches gig cashflow perfectly. A worker earning ₹40 per delivery barely notices ₹2 being directed to their own income safety net. Coverage activates automatically once the weekly premium threshold is accumulated. This "pay-as-you-earn" model has been validated in micro-insurance pilots across Southeast Asia and removes the single biggest barrier to gig worker insurance adoption: the upfront payment hesitation.
+
+| Collection Mode | How It Works | Best For |
+|---|---|---|
+| **Standard Weekly** | Single deduction every Monday | Workers who prefer simplicity |
+| **Sachet Mode** | ₹2/delivery, capped at 25 deliveries | Workers with irregular income weeks |
+
 ---
 
 ## Parametric Trigger Design
 
 Triggers are fully automated. No manual claim submission required.
 
-| Trigger ID | Event | Threshold | Validation Source |
+### Hyper-Local Zone Strategy
+
+City-wide weather forecasts are too coarse for metro India. A red alert for "Mumbai" tells us nothing about whether Dharavi is flooded while Bandra is dry. GigShield uses **hyper-local, zone-level weather APIs** (Tomorrow.io / WeatherAPI) that provide minute-by-minute forecasts queryable down to a few hundred meters, tied to our delivery zone polygon grid.
+
+Critically, weather signals are always overlaid with **platform demand heatmap data**. If a zone is showing high surge demand on Zomato *and* our weather API reports severe rainfall there simultaneously, that is a gold-standard trigger — it proves orders were about to happen and the rain actively prevented work. This dual-signal approach eliminates false positives from light rain that wouldn't actually stop deliveries.
+
+### Trigger Registry
+
+| Trigger ID | Event | Threshold | Validation Sources |
 |---|---|---|---|
-| `ENV-01` | Extreme Rainfall | > 65mm/day in zone | IMD / OpenWeatherMap API |
+| `ENV-01` | Extreme Rainfall | > 65mm/day in zone polygon | IMD + Tomorrow.io hyper-local API |
 | `ENV-02` | Flood Zone Alert | Official flood advisory for PIN/zone | NDMA API + Google Crisis Map |
-| `ENV-03` | AQI Severe | AQI > 400 in city zone | CPCB API / AQICNapi |
-| `ENV-04` | Extreme Heat | > 44°C + Heat wave alert | IMD API |
+| `ENV-03` | AQI Severe | AQI > 400 in city zone | CPCB API + AQICNapi |
+| `ENV-04` | Extreme Heat | > 44°C + Heat wave advisory | IMD API + Tomorrow.io |
 | `SOC-01` | Local Curfew/Bandh | Road velocity < 5 km/h for 3+ hrs + news confirm | MapmyIndia Traffic API + News API |
 | `SOC-02` | Platform Outage | Zomato/Swiggy API non-responsive for 4+ hrs | Synthetic monitoring via StatusPage mock |
 | `SOC-03` | Night Curfew Zone | Official government order in PIN code area | Government alert API / mock |
+| `SOC-04` | Crowdsourced Flash Event | 50+ workers in 2km zone report disruption within 15 mins | In-app report button + traffic API corroboration + human review |
 
-**All triggers require corroboration from at least 2 independent data sources** before a claim window opens. This is the single most important fraud-resistance design decision in the system.
+**All triggers require corroboration from at least 2 independent data sources** before a claim window opens. `SOC-04` additionally requires human adjudicator confirmation before payouts are released, making crowdsourced reports abuse-resistant by design.
 
 ---
 
@@ -172,6 +207,17 @@ This was a deliberate, research-backed choice.
 4. **Platform Worker ID Integration:** Zomato and Swiggy's worker-facing apps are Android-first. Our onboarding flow can deep-link to platform credential verification.
 
 5. **Regional Language Support:** Android makes it straightforward to support Hindi, Tamil, Kannada, and Bengali UI — essential for delivery worker trust and comprehension.
+
+### WhatsApp as a Complementary Onboarding Channel
+
+While our primary experience is Android-native, we recognize that many delivery workers use WhatsApp more than any other app. For workers who are hesitant to install yet another app, GigShield offers a **WhatsApp bot onboarding flow**:
+
+1. Worker texts our WhatsApp Business number with their Zomato/Swiggy worker ID
+2. Bot verifies identity via OTP, collects UPI VPA, and explains the weekly coverage in simple language
+3. First premium is collected via an in-chat UPI intent: the bot sends a payment request, the worker confirms with their UPI PIN — no app installation needed
+4. Disruption payouts are delivered via WhatsApp notification with an embedded UPI credit confirmation
+
+Once onboarded via WhatsApp, workers are gently guided toward the Android app for the full dashboard experience. But if they never install the app, they're still fully covered. WhatsApp is the bridge, Android is the home.
 
 ---
 
@@ -339,8 +385,9 @@ Every claim must satisfy the following truth table before any payout is released
 | No ring-detection cluster flag | ✅ Mandatory | Graph anomaly model |
 | Payout within normal range | ✅ Mandatory | Isolation Forest score |
 | Trigger corroborated by 2+ sources | ✅ Mandatory | Multi-API validation |
+| Ghost Shift score > 0.25 | ✅ Mandatory | Behavioral pattern model |
 
-**All eight conditions must be true.** Fail any one → hold for human review, not auto-reject. We never automatically punish workers. We hold and review.
+**All nine conditions must be true.** Fail any one → hold for human review, not auto-reject. We never automatically punish workers. We hold and review.
 
 ---
 
@@ -359,6 +406,26 @@ This makes it economically unattractive to spin up fake accounts — the payoff 
 
 ---
 
+### Layer 7 — Ghost Shift Detection (Behavioral Pattern AI)
+
+This is perhaps the subtlest fraud vector: a worker who **never works Sunday nights** suddenly claims a payout for a Sunday night disruption event. GPS is clean. Device is clean. No ring cluster. But the claim is still almost certainly fraudulent — they would never have earned anything that shift anyway.
+
+We build an **individual work pattern model** for each worker from their historical login/delivery logs (hour-of-day × day-of-week × zone heatmap). This creates a probabilistic fingerprint of when and where a given worker actually earns income.
+
+When a disruption trigger fires, before calculating payout we query: *"What is the probability that this worker would have been working right now, based on their history?"*
+
+```
+Adjusted Payout = Base Payout × P(worker active | historical pattern for this time slot)
+```
+
+A worker who has never worked Sunday nights gets close to ₹0 payout for a Sunday night disruption — because their expected earnings in that slot are near zero. A worker who reliably works Sunday 7–11 PM receives full payout. The model self-calibrates over time as more history accumulates.
+
+**This eliminates the "Ghost Shift" fraud class entirely**: claiming disruption payouts for shifts you were never going to work. No GPS spoofing needed — but the fraud is detected through behavioral analysis instead.
+
+Ghost Shift scoring is also added to the cross-signal truth table as a 9th condition: **Ghost Shift score must be > 0.25** (i.e., worker has at least a 25% historical probability of being active during the claimed disruption window) for auto-approval. Below threshold → human review queue.
+
+---
+
 ### How We Distinguish the Genuine Stranded Worker from the Faker
 
 This is the core philosophical question of the Market Crash challenge.
@@ -372,8 +439,9 @@ This is the core philosophical question of the Market Crash challenge.
 | Historical pattern match | Consistent with their profile | Sudden zone migration |
 | Network metadata | Home/local cell tower match | Mismatch with claimed location |
 | Ring graph score | Isolated node | High-centrality cluster node |
+| Ghost Shift score | > 0.25 (regularly works this slot) | Near 0 (never works this slot) |
 
-A genuine worker will pass all eight cross-signal checks naturally. A fraudster will fail at least 2–3, which triggers a review — not an automatic denial. **We are designed to protect honest workers first, and catch fraud second.**
+A genuine worker will pass all nine cross-signal checks naturally. A fraudster will fail at least 2–3, which triggers a review — not an automatic denial. **We are designed to protect honest workers first, and catch fraud second.**
 
 ---
 
@@ -387,14 +455,17 @@ A genuine worker will pass all eight cross-signal checks naturally. A fraudster 
 │  • Retrofit (API calls) + Room (local cache)         │
 │  • WorkManager (background sync jobs)                │
 │  • Firebase Push (disruption alerts + payout notifs) │
+│  • "Report Disruption" crowdsource button            │
 └─────────────────────┬────────────────────────────────┘
                       │ HTTPS / REST
 ┌─────────────────────▼────────────────────────────────┐
 │           BACKEND (FastAPI — Python)                  │
 │  • Worker API, Policy API, Claims API, Payout API    │
 │  • Trigger Engine (cron + webhook listeners)         │
-│  • Fraud Scoring Engine                              │
+│  • Fraud Scoring Engine (9-signal truth table)       │
 │  • ML Model Serving (XGBoost, Isolation Forest)      │
+│  • Crowdsource Quorum Engine (SOC-04)                │
+│  • WhatsApp Business API bot (onboarding channel)    │
 └──────────────┬───────────────────┬───────────────────┘
                │                   │
 ┌──────────────▼──────┐  ┌─────────▼──────────────────┐
@@ -404,12 +475,13 @@ A genuine worker will pass all eight cross-signal checks naturally. A fraudster 
                │
 ┌──────────────▼──────────────────────────────────────┐
 │          EXTERNAL INTEGRATIONS                       │
-│  • OpenWeatherMap API (rainfall, temp)               │
+│  • Tomorrow.io (hyper-local zone weather)            │
 │  • CPCB AQI API (air quality)                        │
 │  • MapmyIndia Traffic API (road velocity)            │
 │  • NDMA Flood Alerts API                             │
 │  • News API (bandh/curfew corroboration)             │
 │  • Razorpay (payout sandbox — UPI/bank transfer)     │
+│  • WhatsApp Business API (onboarding + notifications)│
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -422,6 +494,8 @@ A genuine worker will pass all eight cross-signal checks naturally. A fraudster 
 | Ring detection | NetworkX graph analysis | Celery background task |
 | Disruption forecasting | LSTM (TensorFlow Lite on-device) | Android edge inference |
 | Worker clustering | K-Means | Offline batch, weekly retrain |
+| Ghost Shift detection | Markov chain / probability matrix per worker | FastAPI, updated weekly |
+| Crowdsource quorum engine | Rule-based + traffic API corroboration | FastAPI + Redis counter |
 
 ---
 
@@ -454,9 +528,7 @@ A genuine worker will pass all eight cross-signal checks naturally. A fraudster 
 
 ## Team
 
-> Sannjusmita Das        
-> Krish Sharma        
-> Anant Agarwal            
+> *(Team details to be added)*
 
 ---
 
