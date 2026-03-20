@@ -528,7 +528,9 @@ A genuine worker will pass all nine cross-signal checks naturally. A fraudster w
 
 ## Team
 
-> *(Team details to be added)*
+> Sannjusmita Das
+> Krish Sharma
+> Anant Agarwal
 
 ---
 
